@@ -1,0 +1,4 @@
+.venv
+complaints.db
+__pycache__
+*.py[cod]

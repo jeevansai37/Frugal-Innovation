@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Complaint submitted | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="card success-card">
+      <div class="success-icon" aria-hidden="true">✓</div>
+      <div class="eyebrow">REQUEST RECEIVED</div>
+      <h1>Thank you, {{ complaint.name }}.</h1>
+      <p class="intro">Your maintenance complaint has been recorded successfully.</p>
+      <div class="tracking-box">
+        <span>YOUR COMPLAINT ID</span>
+        <strong>{{ complaint.complaint_id }}</strong>
+      </div>
+      <div class="details">
+        <span>Category</span><strong>{{ complaint.category }}</strong>
+        <span>Priority</span><strong><span class="priority-badge priority-{{ complaint.priority|lower }}">{{ complaint.priority }}</span></strong>
+        <span>Status</span><strong><span class="status">{{ complaint.status }}</span></strong>
+      </div>
+      <a class="button-link" href="{{ url_for('complaint_form') }}">Submit another complaint</a>
+      <p class="footnote">Keep your complaint ID for future reference.</p>
+    </section>
+  </main>
+</body>
+</html>

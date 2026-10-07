@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Student Dashboard | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell dashboard-shell">
+    <section class="card dashboard-card student-card">
+      <nav class="app-nav student-nav">
+        <a href="{{ url_for('complaint_form') }}">Submit Complaint</a>
+        <a href="{{ url_for('student_dashboard') }}">Student Dashboard</a>
+        <a href="{{ url_for('dashboard') }}">Maintenance Dashboard</a>
+      </nav>
+      <div class="eyebrow">CAMPUS SERVICES</div>
+      <h1>Student dashboard</h1>
+      <p class="intro">Enter the roll number used when submitting your complaints.</p>
+
+      <form class="student-lookup" method="get" action="{{ url_for('student_dashboard') }}">
+        <label for="student-roll-number">Enter your roll number</label>
+        <input id="student-roll-number" name="roll_number" type="text" value="{{ student_roll_number }}" required maxlength="50" placeholder="Your roll number" autocomplete="off">
+        <button type="submit">View My Complaints</button>
+      </form>
+
+      {% if student_roll_number %}
+      <section class="student-results" aria-label="Your complaints">
+        <h2>My Complaints</h2>
+        <section class="summary-grid" aria-label="Complaint summary">
+          <article class="summary-card"><span>Total Complaints</span><strong>{{ counts.total }}</strong></article>
+          <article class="summary-card"><span>Pending</span><strong>{{ counts.pending or 0 }}</strong></article>
+          <article class="summary-card"><span>In Progress</span><strong>{{ counts.in_progress or 0 }}</strong></article>
+          <article class="summary-card"><span>Resolved</span><strong>{{ counts.resolved or 0 }}</strong></article>
+        </section>
+
+        {% if complaints %}
+        <div class="table-wrap">
+          <table class="complaints-table student-table">
+            <thead><tr>
+              <th>Complaint ID</th><th>Location</th><th>Category</th><th>Priority</th>
+              <th>Description</th><th>Status</th><th>Created Date</th><th>View</th>
+            </tr></thead>
+            <tbody>
+              {% for complaint in complaints %}
+              <tr>
+                <td class="id-cell">{{ complaint.complaint_id }}</td>
+                <td>{{ complaint.location }}</td>
+                <td>{{ complaint.category }}</td>
+                <td><span class="priority-badge priority-{{ (complaint.priority or 'Medium')|lower }}">{{ complaint.priority or 'Medium' }}</span></td>
+                <td class="description-cell">{{ complaint.description }}</td>
+                <td><span class="status-badge">{{ complaint.status }}</span></td>
+                <td>{{ complaint.created_at|replace('T', ' ') }}</td>
+                <td><a class="view-link" href="{{ url_for('student_complaint_detail', complaint_id=complaint.complaint_id, roll_number=student_roll_number) }}">View</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="no-complaints">No complaints found.</p>
+        {% endif %}
+      </section>
+      {% endif %}
+      <p class="footnote">Roll-number lookup is for this prototype and is not authentication.</p>
+    </section>
+  </main>
+</body>
+</html>

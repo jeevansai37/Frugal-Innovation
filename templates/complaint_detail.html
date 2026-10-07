@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Complaint {{ complaint.complaint_id }} | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="card detail-card">
+      <nav class="app-nav"><a href="{{ url_for('dashboard') }}">← Maintenance Dashboard</a></nav>
+      <div class="eyebrow">COMPLAINT DETAILS</div>
+      <h1>{{ complaint.complaint_id }}</h1>
+      <p class="intro">Review the reported issue and update its status.</p>
+
+      {% if updated %}<div class="notice" role="status">Status updated successfully.</div>{% endif %}
+      {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+
+      <dl class="detail-list">
+        <dt>Name</dt><dd>{{ complaint.name }}</dd>
+        <dt>Location</dt><dd>{{ complaint.location }}</dd>
+        <dt>Category</dt><dd>{{ complaint.category }}</dd>
+        <dt>Priority</dt><dd><span class="priority-badge priority-{{ (complaint.priority or 'Medium')|lower }}">{{ complaint.priority or 'Medium' }}</span></dd>
+        <dt>Description</dt><dd class="detail-description">{{ complaint.description }}</dd>
+        <dt>Current Status</dt><dd><span class="status-badge">{{ complaint.status }}</span></dd>
+        <dt>Created Date</dt><dd>{{ complaint.created_at|replace('T', ' ') }}</dd>
+      </dl>
+
+      <form class="status-form" method="post">
+        <label for="status">Update status</label>
+        <select id="status" name="status" required>
+          {% for status in statuses %}
+          <option value="{{ status }}" {% if complaint.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Update Status</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>College Maintenance | Submit a Complaint</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="card">
+      <nav class="app-nav"><a href="{{ url_for('student_dashboard') }}">Student Dashboard</a><a href="{{ url_for('dashboard') }}">Maintenance Dashboard</a><a href="{{ url_for('admin_dashboard') }}">Admin Dashboard</a></nav>
+      <div class="eyebrow">CAMPUS SERVICES</div>
+      <h1>Maintenance complaint</h1>
+      <p class="intro">Tell us what needs attention. Your request will be recorded, categorized, and prioritized automatically.</p>
+
+      {% if errors %}
+      <div class="alert" role="alert">
+        <strong>Please check the form:</strong>
+        <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('complaint_form', location=locked_location) if locked_location else url_for('complaint_form') }}">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" value="{{ values.name }}" required maxlength="100" placeholder="Your name">
+
+        <label for="roll_number">Roll Number</label>
+        <input id="roll_number" name="roll_number" type="text" value="{{ values.roll_number }}" required maxlength="50" placeholder="Your college roll number" autocomplete="off">
+
+        <label for="location">Location</label>
+        <input id="location" name="location" type="text" value="{{ values.location }}" required maxlength="150" placeholder="Building, room, or area" {% if locked_location %}readonly aria-describedby="location-help"{% endif %}>
+        {% if locked_location %}<small id="location-help" class="field-help">Location set by the QR code.</small>{% endif %}
+
+        <p class="auto-category-note">Category and priority are assigned from the description using keyword rules.</p>
+
+        <label for="description">Problem description</label>
+        <textarea id="description" name="description" rows="5" required maxlength="2000" placeholder="Describe the issue and any helpful details">{{ values.description }}</textarea>
+
+        <button type="submit">Submit complaint <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="footnote">All fields are required. Submitted complaints start with Pending status.</p>
+      <p class="footnote"><a href="{{ url_for('qr_codes') }}">View location QR codes</a></p>
+    </section>
+  </main>
+</body>
+</html>

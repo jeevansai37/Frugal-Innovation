@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Complaint not found | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="card">
+      <div class="eyebrow">NOT FOUND</div>
+      <h1>Complaint not found</h1>
+      <p class="intro">That complaint ID does not exist in the database.</p>
+      <a class="button-link" href="{{ url_for('dashboard') }}">Back to dashboard</a>
+    </section>
+  </main>
+</body>
+</html>

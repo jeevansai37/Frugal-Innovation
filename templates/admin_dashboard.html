@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Dashboard | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell dashboard-shell">
+    <section class="card admin-card">
+      <nav class="app-nav student-nav">
+        <a href="{{ url_for('complaint_form') }}">Submit Complaint</a>
+        <a href="{{ url_for('student_dashboard') }}">Student Dashboard</a>
+        <a href="{{ url_for('dashboard') }}">Maintenance Dashboard</a>
+      </nav>
+      <div class="eyebrow">CAMPUS SERVICES</div>
+      <h1>Admin dashboard</h1>
+      <p class="intro">Read-only overview and analytics for campus maintenance complaints.</p>
+
+      <section class="summary-grid admin-summary" aria-label="Complaint totals">
+        <article class="summary-card"><span>Total Complaints</span><strong>{{ summary.total }}</strong></article>
+        <article class="summary-card"><span>Pending</span><strong>{{ summary.pending or 0 }}</strong></article>
+        <article class="summary-card"><span>In Progress</span><strong>{{ summary.in_progress or 0 }}</strong></article>
+        <article class="summary-card"><span>Resolved</span><strong>{{ summary.resolved or 0 }}</strong></article>
+        <article class="summary-card priority-summary"><span>High Priority</span><strong>{{ summary.high_priority or 0 }}</strong></article>
+      </section>
+
+      <section class="analytics-grid" aria-label="Complaint analytics">
+        <article class="analytics-panel">
+          <h2>Complaints by Category</h2>
+          {% if summary.total %}
+          <div class="bar-list">
+            {% for item in categories %}
+            <div class="bar-row">
+              <span>{{ item.label }}</span>
+              <div class="bar-track"><div class="bar-fill" style="width: {{ item.width }}%"></div></div>
+              <strong>{{ item.total }}</strong>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}<p class="chart-empty">No complaint data yet.</p>{% endif %}
+        </article>
+
+        <article class="analytics-panel">
+          <h2>Complaints by Location/Block</h2>
+          {% if locations %}
+          <div class="bar-list location-bars">
+            {% for item in locations %}
+            <div class="bar-row">
+              <span>{{ item.label }}</span>
+              <div class="bar-track"><div class="bar-fill location-fill" style="width: {{ item.width }}%"></div></div>
+              <strong>{{ item.total }}</strong>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}<p class="chart-empty">No complaint data yet.</p>{% endif %}
+        </article>
+
+        <article class="analytics-panel status-panel">
+          <h2>Complaint Status Distribution</h2>
+          {% if status_total %}
+          <div class="donut-wrap">
+            <svg class="status-donut" viewBox="0 0 100 100" role="img" aria-label="Status distribution chart">
+              <circle cx="50" cy="50" r="15.9155" fill="none" stroke="#edf2f1" stroke-width="9"></circle>
+              {% for item in status_segments if item.percentage > 0 %}
+              <circle cx="50" cy="50" r="15.9155" fill="none" stroke="{{ item.color }}" stroke-width="9"
+                      stroke-dasharray="{{ item.percentage }} {{ 100 - item.percentage }}"
+                      stroke-dashoffset="{{ 0 - item.offset }}" transform="rotate(-90 50 50)"></circle>
+              {% endfor %}
+              <text x="50" y="48" text-anchor="middle" class="donut-total">{{ status_total }}</text>
+              <text x="50" y="59" text-anchor="middle" class="donut-caption">complaints</text>
+            </svg>
+            <ul class="chart-legend">
+              {% for item in status_segments %}
+              <li><span class="legend-dot" style="background: {{ item.color }}"></span>{{ item.label }} <strong>{{ item.total }}</strong></li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% else %}<p class="chart-empty">No complaint data yet.</p>{% endif %}
+        </article>
+
+        <article class="analytics-panel time-panel">
+          <h2>Complaints Over Time</h2>
+          {% if time_points %}
+          <div class="line-chart-wrap">
+            <svg class="time-chart" viewBox="0 0 620 230" role="img" aria-label="Complaint counts by month">
+              <line x1="42" y1="166" x2="578" y2="166" class="chart-axis"></line>
+              <line x1="42" y1="24" x2="42" y2="166" class="chart-axis"></line>
+              {% if time_polyline %}<polyline points="{{ time_polyline }}" class="time-line"></polyline>{% endif %}
+              {% for point in time_points %}
+              <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4" class="time-point"></circle>
+              <text x="{{ point.x }}" y="{{ point.y - 10 }}" text-anchor="middle" class="point-value">{{ point.total }}</text>
+              <text x="{{ point.x }}" y="190" text-anchor="middle" class="time-label">{{ point.label }}</text>
+              {% endfor %}
+            </svg>
+          </div>
+          {% else %}<p class="chart-empty">No complaint data yet.</p>{% endif %}
+        </article>
+      </section>
+
+      <section class="highlights-grid" aria-label="Complaint highlights">
+        <article class="highlight-card"><span>Most Reported Location</span><strong>{{ most_reported_location or '—' }}</strong></article>
+        <article class="highlight-card"><span>Most Common Complaint Category</span><strong>{{ most_common_category or '—' }}</strong></article>
+      </section>
+
+      <section class="recent-section">
+        <h2>Recent Complaints</h2>
+        <div class="table-wrap">
+          <table class="complaints-table">
+            <thead><tr><th>Complaint ID</th><th>Location</th><th>Category</th><th>Status</th><th>Created Date</th></tr></thead>
+            <tbody>
+              {% for complaint in recent_complaints %}
+              <tr>
+                <td class="id-cell">{{ complaint.complaint_id }}</td>
+                <td>{{ complaint.location }}</td>
+                <td>{{ complaint.category }}</td>
+                <td><span class="status-badge">{{ complaint.status }}</span></td>
+                <td>{{ complaint.created_at|replace('T', ' ') }}</td>
+              </tr>
+              {% else %}
+              <tr><td class="empty-row" colspan="5">No complaints have been submitted yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <p class="footnote">Read-only prototype analytics. Authentication has not been added.</p>
+    </section>
+  </main>
+</body>
+</html>

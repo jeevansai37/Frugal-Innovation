@@ -1,0 +1,28 @@
+# Python environments and cache files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local databases and instance data
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*api_key*
+*apikey*
+*turso*credential*
+*turso*token*
+*.pem
+*.key
+
+# Generated tooling files
+.vercel/
+.pytest_cache/
+*.log

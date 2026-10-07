@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Location QR codes | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="card qr-gallery">
+      <div class="eyebrow">CAMPUS SERVICES</div>
+      <h1>Location QR codes</h1>
+      <p class="intro">Scan a code to open the complaint form with its location filled in and locked.</p>
+      <div class="qr-grid">
+        {% for location, target_url in entries %}
+        <article class="qr-item">
+          <h2>{{ location }}</h2>
+          <img src="{{ url_for('qr_code', location=location) }}" alt="QR code for {{ location }}">
+          <code>{{ target_url }}</code>
+          <a class="download-link" href="{{ url_for('qr_code', location=location, download=1) }}">Download SVG</a>
+        </article>
+        {% endfor %}
+      </div>
+      <a class="back-link" href="{{ url_for('complaint_form') }}">← Back to complaint form</a>
+    </section>
+  </main>
+</body>
+</html>
