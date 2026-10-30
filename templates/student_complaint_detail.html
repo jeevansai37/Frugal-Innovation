@@ -11,8 +11,7 @@
     <section class="card detail-card">
       <nav class="app-nav student-nav">
         <a href="{{ url_for('complaint_form') }}">Submit Complaint</a>
-        <a href="{{ url_for('student_dashboard', roll_number=student_roll_number) }}">Student Dashboard</a>
-        <a href="{{ url_for('dashboard') }}">Maintenance Dashboard</a>
+        <a href="{{ url_for('student_dashboard') }}">Check another complaint</a>
       </nav>
       <div class="eyebrow">MY COMPLAINT</div>
       <h1>{{ complaint.complaint_id }}</h1>
@@ -26,7 +25,7 @@
         <dt>Created Date</dt><dd>{{ complaint.created_at|replace('T', ' ') }}</dd>
       </dl>
       <p class="student-readonly-note">Status is read-only in the student view.</p>
-      <a class="button-link" href="{{ url_for('student_dashboard', roll_number=student_roll_number) }}">Back to My Complaints</a>
+      <a class="button-link" href="{{ url_for('student_dashboard') }}">Check another complaint</a>
     </section>
   </main>
 </body>

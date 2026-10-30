@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff sign in | Campus Services</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="card">
+      <nav class="app-nav" aria-label="Main navigation"><a href="{{ url_for('complaint_form') }}">Complaint form</a><a href="{{ url_for('qr_codes') }}">Location QR codes</a></nav>
+      <div class="eyebrow">STAFF ACCESS</div>
+      <h1>Staff sign in</h1>
+      <p class="intro">Sign in to review complaints and update their status.</p>
+      {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+      {% if configured %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+        <label for="password">Staff password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password">
+        <button type="submit">Sign in</button>
+      </form>
+      {% else %}
+      <p class="footnote">Set the ADMIN_PASSWORD environment variable and restart the app to enable staff sign in.</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

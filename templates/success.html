@@ -18,12 +18,18 @@
         <strong>{{ complaint.complaint_id }}</strong>
       </div>
       <div class="details">
+        <span>Location</span><strong>{{ complaint.location }}</strong>
         <span>Category</span><strong>{{ complaint.category }}</strong>
         <span>Priority</span><strong><span class="priority-badge priority-{{ complaint.priority|lower }}">{{ complaint.priority }}</span></strong>
         <span>Status</span><strong><span class="status">{{ complaint.status }}</span></strong>
       </div>
-      <a class="button-link" href="{{ url_for('complaint_form') }}">Submit another complaint</a>
-      <p class="footnote">Keep your complaint ID for future reference.</p>
+      <div class="tracking-box">
+        <span>ONE-TIME ACCESS CODE</span>
+        <code id="access-code">{{ access_code }}</code>
+      </div>
+      <a class="button-link" href="{{ url_for('student_dashboard') }}">Track complaint status</a>
+      <a class="secondary-link" href="{{ url_for('complaint_form') }}">Submit another complaint</a>
+      <p class="footnote">Save both the complaint ID and this access code. The code is shown only on this page and cannot be recovered.</p>
     </section>
   </main>
 </body>

@@ -9,7 +9,7 @@
 <body>
   <main class="page-shell">
     <section class="card">
-      <nav class="app-nav"><a href="{{ url_for('student_dashboard') }}">Student Dashboard</a><a href="{{ url_for('dashboard') }}">Maintenance Dashboard</a><a href="{{ url_for('admin_dashboard') }}">Admin Dashboard</a></nav>
+      <nav class="app-nav" aria-label="Main navigation"><a href="{{ url_for('qr_codes') }}">Location QR codes</a><a href="{{ url_for('student_dashboard') }}">Track a complaint</a><a href="{{ url_for('staff_login') }}">Staff sign in</a></nav>
       <div class="eyebrow">CAMPUS SERVICES</div>
       <h1>Maintenance complaint</h1>
       <p class="intro">Tell us what needs attention. Your request will be recorded, categorized, and prioritized automatically.</p>
@@ -22,6 +22,7 @@
       {% endif %}
 
       <form method="post" action="{{ url_for('complaint_form', location=locked_location) if locked_location else url_for('complaint_form') }}">
+        <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
         <label for="name">Name</label>
         <input id="name" name="name" type="text" value="{{ values.name }}" required maxlength="100" placeholder="Your name">
 

@@ -7,20 +7,45 @@ __pycache__/
 
 # Local databases and instance data
 *.db
+*.db-*
 *.sqlite
+*.sqlite-*
 *.sqlite3
+*.sqlite3-*
 instance/
 
 # Secrets and local configuration
 .env
 .env.*
+*.env
+*.env.*
 !.env.example
 *api_key*
 *apikey*
 *turso*credential*
 *turso*token*
+credentials
+credentials.*
+secrets
+secrets.*
+service-account*.*
+google-application-credentials*.*
+*.credentials
+*.token
+*.secret
 *.pem
 *.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+*.tfstate
+*.tfstate.*
+.aws/
+.ssh/
+.npmrc
+.netrc
 
 # Generated tooling files
 .vercel/

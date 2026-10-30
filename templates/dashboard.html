@@ -9,7 +9,7 @@
 <body>
   <main class="page-shell dashboard-shell">
     <section class="card dashboard-card">
-      <nav class="app-nav"><a href="{{ url_for('complaint_form') }}">← Complaint form</a></nav>
+      <nav class="app-nav" aria-label="Staff navigation"><a href="{{ url_for('complaint_form') }}">← Complaint form</a><a href="{{ url_for('admin_dashboard') }}">Admin overview</a><form method="post" action="{{ url_for('staff_logout') }}"><input type="hidden" name="csrf_token" value="{{ session.csrf_token }}"><button type="submit">Sign out</button></form></nav>
       <div class="eyebrow">CAMPUS SERVICES</div>
       <h1>Maintenance dashboard</h1>
       <p class="intro">Review submitted maintenance complaints and update their status.</p>
@@ -57,7 +57,7 @@
           </tbody>
         </table>
       </div>
-      <p class="footnote">This prototype dashboard has no authentication yet.</p>
+      <p class="footnote">Staff view · Changes are saved to the local SQLite database.</p>
     </section>
   </main>
 </body>

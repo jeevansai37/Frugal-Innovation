@@ -9,10 +9,11 @@
 <body>
   <main class="page-shell dashboard-shell">
     <section class="card admin-card">
-      <nav class="app-nav student-nav">
+      <nav class="app-nav student-nav" aria-label="Staff navigation">
         <a href="{{ url_for('complaint_form') }}">Submit Complaint</a>
         <a href="{{ url_for('student_dashboard') }}">Student Dashboard</a>
         <a href="{{ url_for('dashboard') }}">Maintenance Dashboard</a>
+        <form method="post" action="{{ url_for('staff_logout') }}"><input type="hidden" name="csrf_token" value="{{ session.csrf_token }}"><button type="submit">Sign out</button></form>
       </nav>
       <div class="eyebrow">CAMPUS SERVICES</div>
       <h1>Admin dashboard</h1>
@@ -125,7 +126,7 @@
           </table>
         </div>
       </section>
-      <p class="footnote">Read-only prototype analytics. Authentication has not been added.</p>
+      <p class="footnote">Staff view · Analytics reflect the complaints currently stored in the local database.</p>
     </section>
   </main>
 </body>
