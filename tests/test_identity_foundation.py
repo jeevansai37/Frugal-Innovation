@@ -1,15 +1,19 @@
 from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 import tempfile
 import unittest
 
-from sqlalchemy import select
+from sqlalchemy import column, delete, select, table, update
+from sqlalchemy.orm import aliased
 
 from campuscare.database import engine_for_url, session_factory, sqlite_url
 from campuscare.identity import (
     DuplicateEmail,
     InvalidToken,
     authenticate_staff,
+    bootstrap_first_super_admin,
     create_password_reset_token,
     create_staff_invitation,
     hash_password,
@@ -23,6 +27,7 @@ from campuscare.identity import (
 )
 from campuscare.models import (
     AuditLog,
+    BootstrapClaim,
     Department,
     LoginAttemptBucket,
     StaffRoleAssignment,
@@ -279,6 +284,128 @@ class IdentityFoundationTests(unittest.TestCase):
             persisted = db.get(AuditLog, event.audit_id)
             self.assertEqual(persisted.action, "test.synthetic")
             self.assertNotIn("password", repr(persisted.details).casefold())
+
+    def test_audit_bulk_update_and_delete_are_rejected(self):
+        with self.sessions_one() as db:
+            event = record_audit_event(
+                db, actor_user_id=self.admin_id, action="test.bulk_guard",
+                subject_type="test", subject_id="fixture-bulk-1",
+                details={"result": "safe"}, occurred_at=self.now,
+            )
+            db.commit()
+            audit_id = event.audit_id
+
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(
+                    update(AuditLog).where(AuditLog.audit_id == audit_id).values(action="rewritten")
+                )
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(delete(AuditLog).where(AuditLog.audit_id == audit_id))
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(
+                    update(AuditLog.__table__)
+                    .where(AuditLog.__table__.c.audit_id == audit_id)
+                    .values(action="rewritten")
+                )
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(
+                    delete(AuditLog.__table__).where(AuditLog.__table__.c.audit_id == audit_id)
+                )
+            audit_alias = AuditLog.__table__.alias("audit_alias")
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(update(audit_alias).values(action="rewritten"))
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(delete(audit_alias))
+            orm_audit_alias = aliased(AuditLog, name="orm_audit_alias")
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(update(orm_audit_alias).values(action="rewritten"))
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(delete(orm_audit_alias))
+            audit_expression = table("audit_logs", column("action"))
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(update(audit_expression).values(action="rewritten"))
+            with self.assertRaisesRegex(ValueError, "append-only"):
+                db.execute(delete(audit_expression))
+
+            bucket = LoginAttemptBucket(
+                bucket_key="unrelated-table-guard-test", window_started_at=self.now,
+                attempts=1, updated_at=self.now,
+            )
+            db.add(bucket)
+            db.commit()
+            db.execute(
+                update(LoginAttemptBucket.__table__)
+                .where(LoginAttemptBucket.bucket_key == bucket.bucket_key)
+                .values(attempts=2)
+            )
+            db.commit()
+            self.assertEqual(
+                db.scalar(select(LoginAttemptBucket.attempts).where(
+                    LoginAttemptBucket.bucket_key == bucket.bucket_key
+                )),
+                2,
+            )
+            db.execute(
+                delete(LoginAttemptBucket.__table__).where(
+                    LoginAttemptBucket.bucket_key == bucket.bucket_key
+                )
+            )
+            db.commit()
+            self.assertIsNone(db.scalar(select(LoginAttemptBucket.bucket_key).where(
+                LoginAttemptBucket.bucket_key == bucket.bucket_key
+            )))
+
+            persisted = db.get(AuditLog, audit_id)
+            self.assertEqual(persisted.action, "test.bulk_guard")
+            self.assertEqual(db.query(AuditLog).filter_by(audit_id=audit_id).count(), 1)
+
+    def test_concurrent_initial_super_admin_bootstrap_succeeds_once(self):
+        database_path = Path(self.temp_dir.name) / "empty-bootstrap.db"
+        from campuscare.migration_runner import upgrade_database
+        upgrade_database(sqlite_url(database_path))
+        engine_a = engine_for_url(sqlite_url(database_path))
+        engine_b = engine_for_url(sqlite_url(database_path))
+        factory_a = session_factory(engine_a)
+        factory_b = session_factory(engine_b)
+        barrier = Barrier(2)
+
+        def attempt(factory, email):
+            with factory() as db:
+                barrier.wait(timeout=10)
+                try:
+                    user = bootstrap_first_super_admin(
+                        db,
+                        email=email,
+                        password="synthetic-bootstrap-password",
+                        allowed_domains={"iiitdwd.example"},
+                        now=self.now,
+                    )
+                    return ("created", user.user_id)
+                except PermissionError:
+                    return ("denied", None)
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(attempt, factory_a, "first@iiitdwd.example")
+                second = executor.submit(attempt, factory_b, "second@iiitdwd.example")
+                results = [first.result(timeout=30), second.result(timeout=30)]
+            self.assertEqual(sorted(result[0] for result in results), ["created", "denied"])
+            with factory_a() as db:
+                self.assertEqual(db.query(BootstrapClaim).count(), 1)
+                self.assertEqual(db.query(User).filter_by(account_kind="staff").count(), 1)
+                self.assertEqual(
+                    db.query(StaffRoleAssignment)
+                    .filter_by(role_key="SUPER_ADMIN", revoked_at=None).count(), 1,
+                )
+                with self.assertRaises(PermissionError):
+                    bootstrap_first_super_admin(
+                        db, email="later@iiitdwd.example",
+                        password="another-bootstrap-password", allowed_domains={"iiitdwd.example"},
+                        now=self.now,
+                    )
+        finally:
+            engine_a.dispose()
+            engine_b.dispose()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,12 @@
 
 This roadmap records inspected code and verified checks. It does not imply a Vercel deployment or a live Neon database review.
 
+## Security hardening follow-up
+
+- Added a SQLAlchemy session execution guard against bulk UPDATE/DELETE on `audit_logs`; database role privilege requirements are documented in `SECURITY_NOTES.md`.
+- Added explicit Alembic revision `0004_bootstrap_claims`. A unique claim is acquired and committed with the initial Super Admin transaction to serialize concurrent bootstrap attempts on SQLite and PostgreSQL.
+- Local regression tests cover audit bulk DML rejection and concurrent bootstrap through two SQLite engines. Full suite: **68 run, 66 passed, 2 PostgreSQL tests skipped** because remote database access was prohibited. Test fixtures used temporary SQLite databases; no existing database was migrated and no remote database was contacted.
+
 ## Complaint activity history (implemented on current development branch)
 
 - Added explicit forward-only Alembic revision `0003_complaint_history`, an indexed append-only application event table referencing existing complaint IDs. It does not alter complaint rows or backfill legacy events.

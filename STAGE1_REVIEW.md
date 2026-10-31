@@ -6,7 +6,7 @@
 
 - **Critical:** None found.
 - **High:** One migration safety issue was confirmed and fixed. Direct Alembic invocation could bypass the PostgreSQL opt-in guard in `campuscare.migration_runner`.
-- **Medium:** Two defense-in-depth issues remain: SQLAlchemy bulk DML can bypass audit ORM mapper hooks, and simultaneous first-admin bootstrap invocations can race.
+- **Medium:** The original review found two defense-in-depth issues. Both were addressed in the follow-up addendum below; PostgreSQL runtime privileges remain an operational requirement.
 - **Low:** None identified that changes the current Stage 1 acceptance boundary.
 
 The local SQLite database was not modified. No existing database was migrated. No Neon database was contacted. `POSTGRES_TEST_DATABASE_URL` is not configured, so PostgreSQL execution checks could not be run.
@@ -104,6 +104,17 @@ Use a direct, non-pooled connection. The test role must be able to create and dr
 
 1. PostgreSQL migration/integration verification needs a dedicated disposable database via `POSTGRES_TEST_DATABASE_URL`.
 2. Add the PostgreSQL synthetic-legacy migration case before claiming PostgreSQL legacy migration preservation.
-3. Address the two Medium findings before exposing audit-management or first-admin bootstrap workflows in a shared hosted environment.
+3. The two Medium findings were addressed in the follow-up addendum below; hosted use still requires the documented PostgreSQL runtime-role grants and a database migration performed through the separately approved operational process.
 
 No Stage 2 work was performed. No commit, push, deployment, merge, Production change, local database change, or existing database migration was performed.
+
+## Follow-up security-hardening addendum
+
+The two Medium findings above were remediated in the follow-up hardening work on the same development branch:
+
+- `campuscare/audit.py` now rejects SQLAlchemy session bulk UPDATE/DELETE statements targeting `audit_logs`, alongside the existing mapper hooks. It walks the DML target expression tree to catch ORM aliases, Core aliases, mapped tables, and table-expression targets. Regression tests cover ORM/Core UPDATE/DELETE and confirm unrelated-table DML and normal audit insertion still work. Engine/Connection execution, DBAPI calls, external clients, and opaque textual SQL do not pass enough target information through this session guard; the PostgreSQL role boundary remains required.
+- `migrations/versions/0004_bootstrap_claims.py` adds a database primary-key claim. `bootstrap_first_super_admin()` inserts that unique claim before checking for an existing Super Admin, and commits it atomically with the user, assignment, and audit event. Duplicate claims fail closed and rollback. Concurrent bootstrap is covered by a two-thread/two-engine SQLite test; PostgreSQL execution was intentionally not attempted.
+- `SECURITY_NOTES.md` documents the PostgreSQL runtime role restrictions: runtime must not own the audit table or inherit the migration/table-owner role, and is granted only SELECT/INSERT (with UPDATE, DELETE, and TRUNCATE revoked). Those grants were not applied to a database.
+- Follow-up full suite: **68 run, 66 passed, 2 PostgreSQL integration tests skipped** because remote database access was explicitly prohibited. The targeted audit bulk-DML and concurrent-bootstrap regressions passed. `git diff --check` passed with no whitespace errors.
+
+The follow-up migration was exercised only by tests against temporary SQLite fixtures. No migration or write was performed against an existing database, no remote connection was made, and no deployment occurred.

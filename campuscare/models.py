@@ -212,6 +212,15 @@ class LoginAttemptBucket(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class BootstrapClaim(Base):
+    """Unique transaction claim ensuring the initial Super Admin is created once."""
+
+    __tablename__ = "bootstrap_claims"
+
+    claim_key: Mapped[str] = mapped_column(String(48), primary_key=True)
+    claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class ComplaintHistory(Base):
     """Append-only, student-safe complaint activity events."""
 

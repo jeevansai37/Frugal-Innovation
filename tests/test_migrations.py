@@ -33,7 +33,7 @@ class MigrationFoundationTests(unittest.TestCase):
             self.assertTrue({
                 "complaints", "users", "roles", "permissions", "role_permissions",
                 "departments", "staff_role_assignments", "auth_tokens", "audit_logs",
-                "login_attempt_buckets", "complaint_history", "alembic_version",
+                "login_attempt_buckets", "complaint_history", "bootstrap_claims", "alembic_version",
             }.issubset(set(inspector.get_table_names())))
             columns = {column["name"]: column for column in inspector.get_columns("complaints")}
             self.assertEqual(columns["id"]["type"].__class__.__name__, "INTEGER")

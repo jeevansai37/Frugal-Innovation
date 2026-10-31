@@ -14,10 +14,25 @@ This note covers the current Stage 0/1 foundation on `codex/campuscare-db-founda
 - **Account/session controls:** suspended, inactive, unverified, passwordless, or unassigned staff accounts cannot authenticate through the new service. Session claims carry `user_id` and `session_version`; the resolver checks account state and version, and password reset increments the version. These helpers are not yet wired into the legacy `/staff/login` flow or new HTTP staff routes.
 - **Shared throttling:** failed login buckets are keyed by an HMAC of normalized email and network address, not stored raw identifiers. SQLite/PostgreSQL upsert paths persist counts in the shared database; the service defaults to five failures in 15 minutes and removes expired buckets. Multi-engine tests show separate application-engine instances share a lockout. All production instances must use the same stable `LOGIN_RATE_LIMIT_SECRET` or stable `SECRET_KEY`.
 - **Authorization:** permission checks require a known permission, active/verified user, active role, and valid scope. Department roles require an active assignment to the requested department; global Super Admin/Maintenance Head grants are distinct. Unknown roles/permissions and missing scope deny. No new feature uses the legacy `is_staff` flag.
-- **Audit events:** `record_audit_event` is the append-only application interface. ORM updates/deletes are rejected. Events store action, subject, actor, result, timestamp, optional request ID, and redacted details. Passwords, raw tokens, and complaint descriptions must never be passed into `details`.
+- **Audit events:** `record_audit_event` is the append-only application interface. Mapper hooks and a SQLAlchemy session execution guard reject object and bulk UPDATE/DELETE operations targeting `audit_logs`. Events store action, subject, actor, result, timestamp, optional request ID, and redacted details. Passwords, raw tokens, and complaint descriptions must never be passed into `details`.
+- **Initial administrator bootstrap:** Alembic revision `0004_bootstrap_claims` adds a primary-key claim table. The operator-only bootstrap transaction must insert the unique `initial_super_admin` claim before checking for an active administrator; the claim and account commit together. A duplicate claim fails closed. Apply this explicit migration before using the updated bootstrap CLI.
 - **Compatibility:** the shared `ADMIN_PASSWORD` login and existing complaint routes remain unchanged for the controlled transition. They must not be removed until the new identity flow is integrated, tested end-to-end, and separately approved for cutover.
 
 ## Backup and isolated restore procedure
+
+### PostgreSQL audit-log runtime privileges
+
+The hosted application role must not own `audit_logs` and must not inherit membership in the migration/table-owner role. Apply grants as the separate table owner or migration role after schema migration. The commands below are documentation only and were **not executed**:
+
+```sql
+REVOKE ALL PRIVILEGES ON TABLE public.audit_logs FROM PUBLIC;
+REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.audit_logs FROM campuscare_runtime;
+GRANT SELECT, INSERT ON TABLE public.audit_logs TO campuscare_runtime;
+```
+
+Use a separate privileged migration role for DDL and privilege changes. If the table is in another schema, substitute its actual schema name. A PostgreSQL owner or superuser can still alter the table; the runtime application credential must not have those privileges.
+
+The Python session guard only sees statements routed through SQLAlchemy `Session.execute()`. It does not intercept equivalent Core statements sent through `Engine`/`Connection.execute()`, direct DBAPI calls, external clients, or textual SQL such as `Session.execute(text("DELETE FROM audit_logs ..."))`, whose target is opaque to the structured statement inspection. These paths must not be used by application code. The PostgreSQL role boundary above is required to protect against bypasses and remains effective for all of those paths.
 
 These are procedures to follow before a future migration. They were documented but **not executed** during this stage. Store backups in an access-controlled, encrypted location with an approved retention period. Do not commit them or copy real complaint rows into test fixtures.
 
@@ -72,7 +87,7 @@ The current environment does not provide `DATABASE_URL`; no Neon snapshot or dum
 2. **No real delivery channel:** invite/reset capabilities are service-only and no email is sent. Raw tokens returned by the service need a verified delivery/acceptance path before real staff accounts can be invited.
 3. **No HTTP cutover:** the legacy shared-password staff UI remains active. New authentication/session/permission services are not connected to staff routes. No dashboard should assume the new role checks until explicitly wired and tested.
 4. **Institutional domain pending:** `INSTITUTIONAL_EMAIL_DOMAINS` is blank in the example configuration. Confirm exact official domains and account verification/termination procedures before bootstrap or invitations.
-5. **Audit database privilege boundary:** ORM-level append-only guards do not stop a database owner or direct SQL connection from editing audit rows. Before hosted use, create a runtime DB role that cannot update/delete audit events and a separate migration role with DDL privileges.
+5. **Audit database privilege boundary:** Mapper and session guards do not stop Engine/Connection execution, opaque text SQL, direct DBAPI access, or external clients. Before hosted use, provision the documented non-owner runtime role with SELECT/INSERT only on `audit_logs`, revoke UPDATE/DELETE/TRUNCATE, and keep DDL on a separate migration role. These grants have not been applied or verified on PostgreSQL.
 6. **Login throttling integration:** the shared database service is tested, but no login route calls it yet. All instances must share a stable throttle secret, proxy client-IP handling must be configured carefully, and thresholds/retention must be reviewed for the pilot.
 7. **Bootstrap trust:** `python -m campuscare.bootstrap_admin` is an operator-only local command and treats the operator-provided address as verified. Run it only after an authorized administrator has independently checked identity and domain. It has not been run.
 8. **Privacy/operations:** session expiry/cookie integration, audit retention/access policy, database backup retention, recovery drills, incident response, and policy approval remain before hosted identity use.

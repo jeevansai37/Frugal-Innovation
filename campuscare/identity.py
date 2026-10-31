@@ -7,14 +7,17 @@ import os
 import re
 import secrets
 
-from sqlalchemy import case, delete, or_, select, update
+from sqlalchemy import case, delete, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .audit import record_audit_event
-from .models import AuthToken, Department, LoginAttemptBucket, Role, StaffRoleAssignment, User
+from .models import (
+    AuthToken, BootstrapClaim, Department, LoginAttemptBucket, Role,
+    StaffRoleAssignment, User,
+)
 from .permissions import GLOBAL_ROLES, is_super_admin, validate_role_scope
 
 
@@ -164,41 +167,57 @@ def bootstrap_first_super_admin(db, *, email, password, allowed_domains, now=Non
     """Create the first administrator through an operator-only CLI, never a web route."""
     now = now or utc_now()
     normalized_email = normalize_email(email, allowed_domains)
+    password_hash = hash_password(password)
+
+    # The unique claim is acquired before the existence check and commits atomically
+    # with the initial account. Concurrent PostgreSQL/SQLite transactions serialize
+    # on this primary key; only one can bootstrap successfully.
+    try:
+        db.execute(insert(BootstrapClaim).values(claim_key="initial_super_admin", claimed_at=now))
+    except IntegrityError as exc:
+        db.rollback()
+        raise PermissionError("A Super Admin already exists; bootstrap is disabled.") from exc
+
     if db.scalar(select(StaffRoleAssignment.assignment_id).where(
         StaffRoleAssignment.role_key == "SUPER_ADMIN",
         StaffRoleAssignment.revoked_at.is_(None),
     )) is not None:
+        db.rollback()
         raise PermissionError("A Super Admin already exists; bootstrap is disabled.")
-    user = User(
-        account_kind="staff",
-        email=email.strip(),
-        normalized_email=normalized_email,
-        display_name="Super Admin",
-        password_hash=hash_password(password),
-        status="active",
-        email_verified_at=now,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(user)
-    db.flush()
-    db.add(StaffRoleAssignment(
-        user_id=user.user_id,
-        role_key="SUPER_ADMIN",
-        department_id=None,
-        assigned_by_user_id=user.user_id,
-        assigned_at=now,
-    ))
-    record_audit_event(
-        db,
-        actor_user_id=user.user_id,
-        action="staff.super_admin_bootstrapped",
-        subject_type="user",
-        subject_id=user.user_id,
-        occurred_at=now,
-    )
-    db.commit()
-    return user
+    try:
+        user = User(
+            account_kind="staff",
+            email=email.strip(),
+            normalized_email=normalized_email,
+            display_name="Super Admin",
+            password_hash=password_hash,
+            status="active",
+            email_verified_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(user)
+        db.flush()
+        db.add(StaffRoleAssignment(
+            user_id=user.user_id,
+            role_key="SUPER_ADMIN",
+            department_id=None,
+            assigned_by_user_id=user.user_id,
+            assigned_at=now,
+        ))
+        record_audit_event(
+            db,
+            actor_user_id=user.user_id,
+            action="staff.super_admin_bootstrapped",
+            subject_type="user",
+            subject_id=user.user_id,
+            occurred_at=now,
+        )
+        db.commit()
+        return user
+    except Exception:
+        db.rollback()
+        raise
 
 
 def _consume_token(db, raw_token, purpose, now):
