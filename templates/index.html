@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>College Maintenance | Submit a Complaint</title>
+  <title>Submit a Complaint | CampusCare</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <main class="page-shell">
     <section class="card">
-      <nav class="app-nav" aria-label="Main navigation"><a href="{{ url_for('qr_codes') }}">Location QR codes</a><a href="{{ url_for('student_dashboard') }}">Track a complaint</a><a href="{{ url_for('staff_login') }}">Staff sign in</a></nav>
-      <div class="eyebrow">CAMPUS SERVICES</div>
-      <h1>Maintenance complaint</h1>
-      <p class="intro">Tell us what needs attention. Your request will be recorded, categorized, and prioritized automatically.</p>
+      <nav class="app-nav" aria-label="Main navigation"><a href="{{ url_for('home') }}">← CampusCare home</a><a href="{{ url_for('student_dashboard') }}">Track a complaint</a><a href="{{ url_for('qr_codes') }}">Location QR codes</a></nav>
+      <div class="eyebrow">IIIT DHARWAD · STUDENT SERVICES</div>
+      <h1>Submit a complaint</h1>
+      <p class="intro">Tell us what needs attention. Campus staff will review your report and share updates as it moves forward.</p>
 
       {% if errors %}
       <div class="alert" role="alert">
@@ -33,14 +33,19 @@
         <input id="location" name="location" type="text" value="{{ values.location }}" required maxlength="150" placeholder="Building, room, or area" {% if locked_location %}readonly aria-describedby="location-help"{% endif %}>
         {% if locked_location %}<small id="location-help" class="field-help">Location set by the QR code.</small>{% endif %}
 
-        <p class="auto-category-note">Category and priority are assigned from the description using keyword rules.</p>
+        <label for="category">Complaint category</label>
+        <select id="category" name="category" required>
+          <option value="" {% if not values.category %}selected{% endif %}>Choose a category</option>
+          {% for category in categories %}<option value="{{ category }}" {% if values.category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}
+        </select>
+        <small class="field-help">If you are unsure, choose Other.</small>
 
         <label for="description">Problem description</label>
         <textarea id="description" name="description" rows="5" required maxlength="2000" placeholder="Describe the issue and any helpful details">{{ values.description }}</textarea>
 
         <button type="submit">Submit complaint <span aria-hidden="true">→</span></button>
       </form>
-      <p class="footnote">All fields are required. Submitted complaints start with Pending status.</p>
+      <p class="footnote">All fields are required. You’ll receive a private access code after submitting.</p>
       <p class="footnote"><a href="{{ url_for('qr_codes') }}">View location QR codes</a></p>
     </section>
   </main>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f8fa">
+  <title>CampusCare | IIIT Dharwad</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="home-body">
+  <header class="site-header">
+    <a class="brand" href="{{ url_for('home') }}" aria-label="CampusCare home">
+      <span class="brand-mark" aria-hidden="true">C</span>
+      <span>CampusCare<small>IIIT Dharwad</small></span>
+    </a>
+    <nav class="home-nav" aria-label="Main navigation">
+      <a href="{{ url_for('complaint_form') }}">Submit a complaint</a>
+      <a href="{{ url_for('student_dashboard') }}">Track a complaint</a>
+      <a class="nav-login" href="{{ url_for('staff_login') }}">Staff login</a>
+    </nav>
+  </header>
+
+  <main class="home-main">
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">CAMPUS SERVICES · IIIT DHARWAD</span>
+        <h1>A better campus starts with a report.</h1>
+        <p>Report a maintenance issue, follow its progress, and help keep every campus space working well.</p>
+        <a class="hero-cta" href="{{ url_for('complaint_form') }}">Submit a Complaint <span aria-hidden="true">→</span></a>
+        <p class="hero-note"><span class="online-dot" aria-hidden="true"></span> A simple way to keep campus services moving</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div>
+        <div class="art-card art-main"><span class="art-icon">✓</span><div><strong>Issue received</strong><small>CampusCare is on it</small></div><span class="art-status">Pending</span></div>
+        <div class="art-card art-mini"><span class="art-mini-icon">↗</span><div><strong>Clear updates</strong><small>From report to resolution</small></div></div>
+        <div class="art-stamp">CARE<br>FOR<br>CAMPUS</div>
+      </div>
+    </section>
+
+    <section class="action-section" aria-labelledby="actions-heading">
+      <div class="section-heading"><div><span class="eyebrow">GET STARTED</span><h2 id="actions-heading">How can we help?</h2></div><p>Choose what you need and we’ll take it from there.</p></div>
+      <div class="action-grid">
+        <a class="action-card action-primary" href="{{ url_for('complaint_form') }}">
+          <span class="action-icon" aria-hidden="true">＋</span><span class="action-label">FOR STUDENTS</span>
+          <h3>Submit a Complaint</h3><p>Tell us what needs attention in your classroom, hostel, or around campus.</p><span class="action-link">Start a report <b aria-hidden="true">→</b></span>
+        </a>
+        <a class="action-card" href="{{ url_for('student_dashboard') }}">
+          <span class="action-icon track-icon" aria-hidden="true">◎</span><span class="action-label">YOUR REQUEST</span>
+          <h3>Track a Complaint</h3><p>Use your complaint ID and private access code to see the latest update.</p><span class="action-link">Check progress <b aria-hidden="true">→</b></span>
+        </a>
+        <a class="action-card" href="{{ url_for('staff_login') }}">
+          <span class="action-icon staff-icon" aria-hidden="true">↗</span><span class="action-label">FOR CAMPUS STAFF</span>
+          <h3>Staff Login</h3><p>Sign in to review reports and share progress with students.</p><span class="action-link">Open staff portal <b aria-hidden="true">→</b></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="steps-section" aria-labelledby="steps-heading">
+      <div class="steps-title"><span class="eyebrow">THREE SIMPLE STEPS</span><h2 id="steps-heading">From issue to resolved.</h2></div>
+      <ol class="steps-list">
+        <li><span class="step-number">01</span><div><h3>Submit</h3><p>Share the location and a short description.</p></div></li>
+        <li><span class="step-number">02</span><div><h3>Track</h3><p>Keep your ID and access code to check progress.</p></div></li>
+        <li><span class="step-number">03</span><div><h3>Resolve</h3><p>Campus staff review the issue and post updates.</p></div></li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="site-footer"><a class="footer-brand" href="{{ url_for('home') }}">CampusCare</a><span>Indian Institute of Information Technology Dharwad</span><a href="{{ url_for('qr_codes') }}">Campus location QR codes</a></footer>
+</body>
+</html>

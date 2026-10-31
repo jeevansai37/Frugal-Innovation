@@ -3,27 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Complaint {{ complaint.complaint_id }} | Campus Services</title>
+  <title>My Complaint {{ complaint.complaint_id }} | CampusCare</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <main class="page-shell">
     <section class="card detail-card">
-      <nav class="app-nav student-nav">
+      <nav class="app-nav student-nav" aria-label="Student navigation">
+        <a href="{{ url_for('home') }}">CampusCare home</a>
         <a href="{{ url_for('complaint_form') }}">Submit Complaint</a>
         <a href="{{ url_for('student_dashboard') }}">Check another complaint</a>
       </nav>
-      <div class="eyebrow">MY COMPLAINT</div>
+      <div class="eyebrow">PRIVATE COMPLAINT TRACKING</div>
       <h1>{{ complaint.complaint_id }}</h1>
       <p class="intro">Complaint details and current progress.</p>
+      <ol class="progress-steps" aria-label="Complaint progress">
+        {% for step in ["Pending", "In Progress", "Resolved"] %}
+        <li class="{% if complaint.status == step %}is-current{% elif (complaint.status == 'In Progress' and step == 'Pending') or complaint.status == 'Resolved' %}is-complete{% endif %}"><span aria-hidden="true">{% if complaint.status == step or (complaint.status == 'In Progress' and step == 'Pending') or complaint.status == 'Resolved' %}✓{% else %}{{ loop.index }}{% endif %}</span>{{ "Submitted" if step == "Pending" else step }}</li>
+        {% endfor %}
+      </ol>
       <dl class="detail-list">
         <dt>Location</dt><dd>{{ complaint.location }}</dd>
         <dt>Category</dt><dd>{{ complaint.category }}</dd>
         <dt>Priority</dt><dd><span class="priority-badge priority-{{ (complaint.priority or 'Medium')|lower }}">{{ complaint.priority or 'Medium' }}</span></dd>
         <dt>Description</dt><dd class="detail-description">{{ complaint.description }}</dd>
         <dt>Current Status</dt><dd><span class="status-badge">{{ complaint.status }}</span></dd>
-        <dt>Created Date</dt><dd>{{ complaint.created_at|replace('T', ' ') }}</dd>
+        <dt>Submitted</dt><dd>{{ complaint.created_at|replace('T', ' ') }}</dd>
+        <dt>Last updated</dt><dd>{{ complaint.last_updated_at|replace('T', ' ') }}</dd>
       </dl>
+      <section class="history-section" aria-labelledby="history-title">
+        <h2 id="history-title">Complaint activity</h2>
+        <ol class="complaint-timeline">
+          {% for event in history %}
+          <li class="timeline-event">
+            <span class="timeline-marker" aria-hidden="true"></span>
+            <div class="timeline-content">
+              <h3>{% if event.event_type == 'submitted' %}Complaint submitted{% elif event.event_type == 'resolved' %}Complaint resolved{% elif event.event_type == 'status_changed' %}Status changed{% elif event.event_type == 'staff_update' %}Staff update{% else %}Legacy staff update{% endif %}</h3>
+              {% if event.created_at %}<time>{{ event.created_at|replace('T', ' ') }}</time>{% else %}<span class="timeline-time-unknown">Original update time unavailable</span>{% endif %}
+              {% if event.previous_status or event.new_status %}<p class="timeline-status">{% if event.previous_status %}{{ event.previous_status }} → {% endif %}{{ event.new_status }}</p>{% endif %}
+              {% if event.remarks %}<p class="timeline-remark">{{ event.remarks }}</p>{% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ol>
+      </section>
       <p class="student-readonly-note">Status is read-only in the student view.</p>
       <a class="button-link" href="{{ url_for('student_dashboard') }}">Check another complaint</a>
     </section>

@@ -1,6 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import deque
-from contextlib import closing
 from functools import wraps
 import hmac
 import hashlib
@@ -17,6 +16,20 @@ from urllib.parse import urlencode
 import qrcode
 import qrcode.image.svg
 from flask import Flask, Response, g, make_response, redirect, render_template, request, session, url_for
+from sqlalchemy.exc import SQLAlchemyError
+
+from campuscare.complaints import (
+    ComplaintNotFoundOrForbidden,
+    InvalidComplaintUpdate,
+    get_staff_complaint,
+    get_staff_complaint_history,
+    list_complaint_history,
+    list_staff_complaints,
+    update_complaint_status,
+)
+from campuscare.database import engine_for_url, session_factory, sqlite_url
+from campuscare.identity import authenticate_staff, resolve_session_user, session_claims
+from campuscare.permissions import has_permission
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -97,6 +110,7 @@ app.config["DATABASE_URL"] = os.environ.get("DATABASE_URL", "").strip()
 app.config["SECRET_KEY"] = (os.environ.get("SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
                             or secrets.token_hex(32))
 app.config["ADMIN_PASSWORD"] = os.environ.get("ADMIN_PASSWORD", "")
+app.config["LOGIN_RATE_LIMIT_SECRET"] = os.environ.get("LOGIN_RATE_LIMIT_SECRET") or app.config["SECRET_KEY"]
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("VERCEL") == "1")
 app.secret_key = app.config["SECRET_KEY"]
@@ -123,38 +137,69 @@ def protect_post_requests():
 def staff_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
-        if not session.get("is_staff"):
+        if current_staff_user() is None:
             return redirect(url_for("staff_login", next=request.full_path.rstrip("?")))
         return view(*args, **kwargs)
     return wrapped_view
+
+
+def get_identity_db():
+    if "identity_db" not in g:
+        database_url = app.config.get("DATABASE_URL") or sqlite_url(app.config["DATABASE"])
+        g.identity_engine = engine_for_url(database_url)
+        g.identity_db = session_factory(g.identity_engine)()
+    return g.identity_db
+
+
+def current_staff_user():
+    if "staff_user" in g:
+        return g.staff_user
+    claims = session.get("staff_identity")
+    if not claims:
+        g.staff_user = None
+        return None
+    try:
+        g.staff_user = resolve_session_user(get_identity_db(), claims)
+    except SQLAlchemyError:
+        g.staff_user = None
+    if g.staff_user is None:
+        session.pop("staff_identity", None)
+    return g.staff_user
 
 
 @app.route("/staff/login", methods=["GET", "POST"])
 def staff_login():
     error = None
     if request.method == "POST":
-        configured_password = app.config.get("ADMIN_PASSWORD", "")
-        submitted_password = request.form.get("password", "")
-        if not configured_password:
-            error = "Staff sign-in is not configured. Set ADMIN_PASSWORD and restart the app."
-        elif hmac.compare_digest(submitted_password, configured_password):
+        try:
+            user = authenticate_staff(
+                get_identity_db(),
+                request.form.get("email", ""),
+                request.form.get("password", ""),
+                request.remote_addr,
+                rate_limit_secret=app.config["LOGIN_RATE_LIMIT_SECRET"],
+            )
+        except SQLAlchemyError:
+            user = None
+            error = "Staff access is not initialized yet. Contact the CampusCare administrator."
+        if user is not None:
             session.clear()
-            session["is_staff"] = True
+            session["staff_identity"] = session_claims(user)
             _csrf_token()
             target = request.args.get("next", "")
             if not target.startswith("/") or target.startswith("//") or "\\" in target:
                 target = url_for("dashboard")
             return redirect(target)
-        else:
-            error = "The staff password was not accepted."
+        if error is None:
+            error = "Email or password was not accepted. Check your details or contact an administrator."
     return render_template("staff_login.html", error=error,
-                           configured=bool(app.config.get("ADMIN_PASSWORD")))
+                           configured=True)
 
 
 @app.post("/staff/logout")
 def staff_logout():
     session.clear()
-    return redirect(url_for("complaint_form"))
+    return redirect(url_for("home"))
 
 
 def get_db():
@@ -171,6 +216,12 @@ def get_db():
 
 @app.teardown_appcontext
 def close_db(error=None):
+    identity_db = g.pop("identity_db", None)
+    identity_engine = g.pop("identity_engine", None)
+    if identity_db is not None:
+        identity_db.close()
+    if identity_engine is not None:
+        identity_engine.dispose()
     db = g.pop("db", None)
     db_context = g.pop("db_context", None)
     if db_context is not None:
@@ -190,6 +241,9 @@ class _PostgresConnection:
 
     def commit(self):
         self.connection.commit()
+
+    def rollback(self):
+        self.connection.rollback()
 
 
 _postgres_connection_pool = None
@@ -211,55 +265,6 @@ def _postgres_pool():
         )
         _postgres_connection_pool.open()
     return _postgres_connection_pool
-
-
-def init_db():
-    if app.config.get("DATABASE_URL"):
-        with _postgres_pool().connection() as connection:
-            connection.execute(
-                """CREATE TABLE IF NOT EXISTS complaints (
-                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                    complaint_id TEXT NOT NULL UNIQUE,
-                    name TEXT NOT NULL,
-                    roll_number TEXT NOT NULL DEFAULT '',
-                    location TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'Pending',
-                    priority TEXT NOT NULL DEFAULT 'Medium',
-                    created_at TEXT NOT NULL,
-                    access_code_hash TEXT
-                )"""
-            )
-            connection.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'Medium'")
-            connection.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS roll_number TEXT NOT NULL DEFAULT ''")
-            connection.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS access_code_hash TEXT")
-        return
-
-    with closing(sqlite3.connect(app.config["DATABASE"])) as db:
-        db.execute(
-            """CREATE TABLE IF NOT EXISTS complaints (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                complaint_id TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                roll_number TEXT NOT NULL DEFAULT '',
-                location TEXT NOT NULL,
-                category TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'Pending',
-                priority TEXT NOT NULL DEFAULT 'Medium',
-                created_at TEXT NOT NULL,
-                access_code_hash TEXT
-            )"""
-        )
-        columns = {row[1] for row in db.execute("PRAGMA table_info(complaints)")}
-        if "priority" not in columns:
-            db.execute("ALTER TABLE complaints ADD COLUMN priority TEXT NOT NULL DEFAULT 'Medium'")
-        if "roll_number" not in columns:
-            db.execute("ALTER TABLE complaints ADD COLUMN roll_number TEXT NOT NULL DEFAULT ''")
-        if "access_code_hash" not in columns:
-            db.execute("ALTER TABLE complaints ADD COLUMN access_code_hash TEXT")
-        db.commit()
 
 
 def categorize_complaint(description):
@@ -357,12 +362,16 @@ def clear_tracking_failures(key):
         _tracking_failures.pop(key, None)
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.get("/")
+def home():
+    return render_template("home.html")
+
+
 @app.route("/complaint", methods=["GET", "POST"])
 def complaint_form():
     locked_location = request.args.get("location", "").strip()
     errors = []
-    values = {field: "" for field in ("name", "roll_number", "location", "description")}
+    values = {field: "" for field in ("name", "roll_number", "location", "category", "description")}
     values["location"] = locked_location
 
     if request.method == "POST":
@@ -380,23 +389,35 @@ def complaint_form():
         for field, max_length in max_lengths.items():
             if len(values[field]) > max_length:
                 errors.append(f"{labels[field]} must be {max_length} characters or fewer.")
+        if values["category"] and values["category"] not in CATEGORIES:
+            errors.append("Choose a valid complaint category.")
 
         if not errors:
-            category = categorize_complaint(values["description"])
+            category = values["category"] or categorize_complaint(values["description"])
             priority = assign_priority(values["description"])
             complaint_id = f"CMP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}"
             access_code = f"{secrets.randbelow(100_000_000):08d}"
             db = get_db()
-            db.execute(
-                """INSERT INTO complaints
-                   (complaint_id, name, roll_number, location, category, description, status, priority,
-                    created_at, access_code_hash)
-                   VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?)""",
-                (complaint_id, values["name"], values["roll_number"], values["location"], category,
-                 values["description"], priority, datetime.now().isoformat(timespec="seconds"),
-                 hash_access_code(access_code)),
-            )
-            db.commit()
+            created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            try:
+                db.execute(
+                    """INSERT INTO complaints
+                       (complaint_id, name, roll_number, location, category, description, status, priority,
+                        created_at, access_code_hash)
+                       VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?)""",
+                    (complaint_id, values["name"], values["roll_number"], values["location"], category,
+                     values["description"], priority, created_at, hash_access_code(access_code)),
+                )
+                db.execute(
+                    """INSERT INTO complaint_history
+                       (complaint_id, event_type, new_status, created_at, request_key)
+                       VALUES (?, 'submitted', 'Pending', ?, ?)""",
+                    (complaint_id, created_at, f"submitted:{complaint_id}"),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
             complaint = {
                 "complaint_id": complaint_id,
                 "name": values["name"],
@@ -407,12 +428,15 @@ def complaint_form():
             }
             response = make_response(render_template(
                 "success.html", complaint=complaint, access_code=access_code,
+                tracking_link=(request.url_root.rstrip("/") + url_for("student_dashboard")
+                               + "#" + urlencode({"complaint_id": complaint_id,
+                                                  "access_code": access_code})),
             ))
             response.headers["Cache-Control"] = "no-store"
             return response
 
     return render_template(
-        "index.html", values=values, errors=errors,
+        "index.html", values=values, errors=errors, categories=CATEGORIES,
         locked_location=locked_location,
     )
 
@@ -444,33 +468,33 @@ def qr_code(location):
 @app.get("/dashboard")
 @staff_required
 def dashboard():
-    db = get_db()
-    counts = db.execute(
-        """SELECT COUNT(*) AS total,
-                  SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS pending,
-                  SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS in_progress,
-                  SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS resolved
-           FROM complaints""",
-        tuple(COMPLAINT_STATUSES),
-    ).fetchone()
-    selected_priority = request.args.get("priority", "")
-    if selected_priority not in PRIORITIES:
-        selected_priority = ""
-    query = """SELECT complaint_id, name, location, category, description, status, priority, created_at
-               FROM complaints"""
-    params = ()
-    if selected_priority:
-        query += " WHERE priority = ?"
-        params = (selected_priority,)
-    query += " ORDER BY created_at DESC, id DESC"
-    complaints = db.execute(query, params).fetchall()
-    return render_template("dashboard.html", counts=counts, complaints=complaints,
-                           priorities=PRIORITIES, selected_priority=selected_priority)
+    user = current_staff_user()
+    db = get_identity_db()
+    all_complaints = list_staff_complaints(db, user)
+    counts = {
+        "total": len(all_complaints),
+        "pending": sum(row["status"] == "Pending" for row in all_complaints),
+        "in_progress": sum(row["status"] == "In Progress" for row in all_complaints),
+        "resolved": sum(row["status"] == "Resolved" for row in all_complaints),
+    }
+    selected_status = request.args.get("status", "")
+    if selected_status not in COMPLAINT_STATUSES:
+        selected_status = ""
+    search = request.args.get("q", "")[:100]
+    complaints = list_staff_complaints(
+        db, user, status=selected_status, search=search,
+    )
+    return render_template(
+        "dashboard.html", counts=counts, complaints=complaints,
+        statuses=COMPLAINT_STATUSES, selected_status=selected_status, search=search,
+    )
 
 
 @app.get("/admin")
 @staff_required
 def admin_dashboard():
+    if not has_permission(get_identity_db(), current_staff_user(), "report.read_global"):
+        return "You do not have permission to view this report.", 403
     db = get_db()
     summary = db.execute(
         """SELECT COUNT(*) AS total,
@@ -577,7 +601,7 @@ def student_dashboard():
     if complaint_id and len(complaint_id) <= 50:
         complaint = get_db().execute(
             """SELECT complaint_id, location, category, COALESCE(priority, 'Medium') AS priority,
-                      description, status, created_at, access_code_hash
+                      description, status, created_at, last_updated_at, staff_remarks, access_code_hash
                FROM complaints WHERE complaint_id = ?""",
             (complaint_id,),
         ).fetchone()
@@ -593,7 +617,18 @@ def student_dashboard():
         return response
 
     clear_tracking_failures(attempt_key)
-    response = make_response(render_template("student_complaint_detail.html", complaint=complaint))
+    complaint = {
+        key: complaint[key]
+        for key in ("complaint_id", "location", "category", "priority", "description",
+                    "status", "created_at", "last_updated_at", "staff_remarks")
+    }
+    complaint["last_updated_at"] = complaint["last_updated_at"] or complaint["created_at"]
+    history = list_complaint_history(
+        get_identity_db(), complaint_id, complaint=complaint,
+    )
+    response = make_response(render_template(
+        "student_complaint_detail.html", complaint=complaint, history=history,
+    ))
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -601,41 +636,48 @@ def student_dashboard():
 @app.route("/dashboard/complaint/<complaint_id>", methods=["GET", "POST"])
 @staff_required
 def complaint_detail(complaint_id):
-    db = get_db()
-    complaint = db.execute(
-        """SELECT complaint_id, name, location, category, description, status, priority, created_at
-           FROM complaints WHERE complaint_id = ?""",
-        (complaint_id,),
-    ).fetchone()
+    identity_db = get_identity_db()
+    user = current_staff_user()
+    complaint = get_staff_complaint(identity_db, user, complaint_id)
     if complaint is None:
         return render_template("not_found.html"), 404
 
     error = None
+    update_key = secrets.token_urlsafe(24)
     if request.method == "POST":
         new_status = request.form.get("status", "")
-        if new_status not in COMPLAINT_STATUSES:
-            error = "Choose a valid status."
-        else:
-            db.execute(
-                "UPDATE complaints SET status = ? WHERE complaint_id = ?",
-                (new_status, complaint_id),
+        remarks = request.form.get("staff_remarks", "").strip()
+        update_key = request.form.get("update_key", "") or secrets.token_urlsafe(24)
+        try:
+            update_complaint_status(
+                identity_db, user, complaint_id, new_status, remarks, update_key,
             )
-            db.commit()
+        except InvalidComplaintUpdate as exc:
+            error = str(exc)
+        except PermissionError as exc:
+            error = str(exc)
+        except ComplaintNotFoundOrForbidden:
+            return render_template("not_found.html"), 404
+        else:
             return redirect(url_for("complaint_detail", complaint_id=complaint_id, updated=1))
+        complaint = get_staff_complaint(identity_db, user, complaint_id)
+
+    history = get_staff_complaint_history(identity_db, user, complaint_id)
+    if history is None:
+        return render_template("not_found.html"), 404
 
     return render_template(
         "complaint_detail.html", complaint=complaint,
-        statuses=COMPLAINT_STATUSES, error=error,
+        statuses=COMPLAINT_STATUSES, error=error, history=history,
+        update_key=update_key,
         updated=request.args.get("updated") == "1",
     )
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(host=APP_HOST, debug=APP_HOST in ("127.0.0.1", "localhost"))
 elif os.environ.get("VERCEL") == "1":
     if not app.config["DATABASE_URL"]:
         raise RuntimeError("DATABASE_URL must be configured for Vercel; SQLite is for local development.")
     if not os.environ.get("SECRET_KEY") and not os.environ.get("FLASK_SECRET_KEY"):
         raise RuntimeError("SECRET_KEY must be configured for Vercel.")
-    init_db()

@@ -3,29 +3,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Student complaint lookup | Campus Services</title>
+  <title>Track a Complaint | CampusCare</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <main class="page-shell">
     <section class="card">
       <nav class="app-nav student-nav" aria-label="Main navigation">
+        <a href="{{ url_for('home') }}">CampusCare home</a>
         <a href="{{ url_for('complaint_form') }}">Submit Complaint</a>
-        <a href="{{ url_for('staff_login') }}">Staff sign in</a>
       </nav>
-      <div class="eyebrow">CAMPUS SERVICES</div>
-      <h1>Check a complaint</h1>
-      <p class="intro">Enter the complaint ID and access code separately to view the current status.</p>
-      <form class="student-lookup" method="post" action="{{ url_for('student_dashboard') }}">
+      <div class="eyebrow">PRIVATE COMPLAINT TRACKING</div>
+      <h1>Track your complaint</h1>
+      <p class="intro">Enter your complaint ID and private access code to see the latest status and staff update.</p>
+      <form class="student-lookup" id="tracking-form" data-tracking-form method="post" action="{{ url_for('student_dashboard') }}">
         <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
         <label for="complaint-id">Complaint ID</label>
         <input id="complaint-id" name="complaint_id" type="text" required maxlength="50" placeholder="CMP-YYYYMMDD-XXXXXX" autocomplete="off">
-        <label for="access-code">Access code</label>
-        <input id="access-code" name="access_code" type="text" inputmode="numeric" required maxlength="100" placeholder="8-digit code" autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
-        <button type="submit">View Complaint</button>
+        <label for="access-code">Private access code</label>
+        <input id="access-code" name="access_code" type="password" inputmode="numeric" required maxlength="100" placeholder="Enter your code" autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
+        <button type="submit">View progress</button>
       </form>
-      <p class="footnote">New complaints receive an 8-digit code. Previously issued longer codes still work. Keep your code private; it cannot be recovered.</p>
+      <p class="footnote">Your code is private and cannot be recovered. Never share it with anyone you do not trust.</p>
     </section>
   </main>
+  <script>
+    (() => {
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const complaintId = fragment.get("complaint_id");
+      const accessCode = fragment.get("access_code");
+      if (!complaintId || !accessCode) return;
+      document.getElementById("complaint-id").value = complaintId;
+      document.getElementById("access-code").value = accessCode;
+      window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+      document.getElementById("tracking-form").requestSubmit();
+    })();
+  </script>
 </body>
 </html>
